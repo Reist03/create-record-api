@@ -14,16 +14,32 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://kawatsu624.hiho.jp",
+        "http://kawatsu624.hiho.jp",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = None
+startup_error = None
+
+try:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        client = OpenAI(api_key=api_key)
+    else:
+        startup_error = "OPENAI_API_KEY is not set"
+except Exception as e:
+    startup_error = f"OpenAI client init failed: {str(e)}"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_PATH = os.path.join(
     BASE_DIR,
+    "templates",
     "08_ﾓﾆﾀﾘﾝｸﾞ結果印刷_ACE既定（モニタリング）_202404.xlsx"
 )
 
@@ -151,10 +167,7 @@ def merge_dict(defaults: dict, actual: dict) -> dict:
         return result
 
     for key, value in actual.items():
-        if key in result:
-            result[key] = value
-        else:
-            result[key] = value
+        result[key] = value
     return result
 
 
@@ -198,7 +211,6 @@ def set_if_exists(ws, cell_ref: str, value):
     ws[cell_ref] = "" if value is None else value
 
 
-# 追加：文字起こしを「。」ごとに分割して1行ずつにする
 def split_transcript(text: str):
     if not text:
         return []
@@ -281,14 +293,12 @@ def fill_monitoring_sheet(wb, data: dict, transcript_text: str = ""):
         set_if_exists(ws, f"U{item_row}", p.get("点検結果2", ""))
         set_if_exists(ws, f"Y{item_row}", p.get("今後の方針2", ""))
 
-    # 追加：文字起こしした内容を BJ1, BJ2, BJ3... に表示
     transcript_lines = split_transcript(transcript_text)
     start_row = 1
 
     for i, line in enumerate(transcript_lines):
         cell = f"BJ{start_row + i}"
         ws[cell] = line
-        # 折り返しを使わない
         ws[cell].alignment = Alignment(wrap_text=False)
 
     return wb
@@ -301,6 +311,7 @@ def health():
         "has_api_key": bool(os.getenv("OPENAI_API_KEY")),
         "template_exists": os.path.exists(TEMPLATE_PATH),
         "template_path": TEMPLATE_PATH,
+        "startup_error": startup_error,
     }
 
 
@@ -310,6 +321,12 @@ def report_excel(req: TranscriptRequest):
 
     if not transcript:
         raise HTTPException(status_code=400, detail="transcript empty")
+
+    if startup_error:
+        raise HTTPException(status_code=500, detail=startup_error)
+
+    if client is None:
+        raise HTTPException(status_code=500, detail="OpenAI client is not initialized")
 
     if not os.path.exists(TEMPLATE_PATH):
         raise HTTPException(status_code=500, detail="template file not found")
