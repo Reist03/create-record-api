@@ -48,6 +48,10 @@ class TranscriptRequest(BaseModel):
     transcript: str
 
 
+class SavedSummaryRequest(BaseModel):
+    summary_json: str
+
+
 DEFAULT_REPORT = {
     "実施日": "",
     "前回実施日": "",
@@ -315,6 +319,39 @@ def health():
     }
 
 
+@app.post("/api/report-json")
+def report_json(req: TranscriptRequest):
+    transcript = (req.transcript or "").strip()
+
+    if not transcript:
+        raise HTTPException(status_code=400, detail="transcript empty")
+
+    if startup_error:
+        raise HTTPException(status_code=500, detail=startup_error)
+
+    if client is None:
+        raise HTTPException(status_code=500, detail="OpenAI client is not initialized")
+
+    try:
+        prompt = build_prompt(transcript)
+
+        res = client.responses.create(
+            model="gpt-5-mini",
+            input=prompt,
+        )
+
+        text = extract_text_from_response(res)
+        report = safe_json(text)
+
+        return {
+            "ok": True,
+            "summary_json": json.dumps(report, ensure_ascii=False)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/report-excel")
 def report_excel(req: TranscriptRequest):
     transcript = (req.transcript or "").strip()
@@ -344,6 +381,40 @@ def report_excel(req: TranscriptRequest):
 
         wb = load_workbook(TEMPLATE_PATH)
         wb = fill_monitoring_sheet(wb, report, transcript)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": 'attachment; filename="monitoring_report.xlsx"'
+            },
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/report-excel-from-json")
+def report_excel_from_json(req: SavedSummaryRequest):
+    if startup_error:
+        raise HTTPException(status_code=500, detail=startup_error)
+
+    if not os.path.exists(TEMPLATE_PATH):
+        raise HTTPException(status_code=500, detail="template file not found")
+
+    try:
+        raw_text = (req.summary_json or "").strip()
+        if not raw_text:
+            raise HTTPException(status_code=400, detail="summary_json empty")
+
+        report = safe_json(raw_text)
+
+        wb = load_workbook(TEMPLATE_PATH)
+        wb = fill_monitoring_sheet(wb, report, "")
 
         buf = io.BytesIO()
         wb.save(buf)
