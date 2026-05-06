@@ -34,6 +34,7 @@ TEMPLATE_PATH = os.path.join(
 class ExcelRequest(BaseModel):
     summary_json: str | None = None
     text: str | None = None
+    transcript: str | None = None
 
 
 DEFAULT_REPORT = {
@@ -250,7 +251,7 @@ def health():
         "ok": True,
         "template_exists": os.path.exists(TEMPLATE_PATH),
         "template_path": TEMPLATE_PATH,
-        "version": "excel_from_summary_json_or_text_v1",
+        "version": "excel_from_summary_json_text_or_transcript_v1",
     }
 
 
@@ -259,12 +260,17 @@ def report_excel(req: ExcelRequest):
     if not os.path.exists(TEMPLATE_PATH):
         raise HTTPException(status_code=500, detail="template file not found")
 
-    raw_text = (req.summary_json or req.text or "").strip()
+    raw_text = (
+        req.summary_json
+        or req.text
+        or req.transcript
+        or ""
+    ).strip()
 
     if not raw_text:
         raise HTTPException(
             status_code=400,
-            detail="summary_json or text empty"
+            detail="summary_json or text or transcript empty"
         )
 
     try:
@@ -281,8 +287,7 @@ def report_excel(req: ExcelRequest):
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition":
-                    'attachment; filename="monitoring_report.xlsx"'
+                "Content-Disposition": 'attachment; filename="monitoring_report.xlsx"'
             },
         )
 
