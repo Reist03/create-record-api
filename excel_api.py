@@ -32,9 +32,8 @@ TEMPLATE_PATH = os.path.join(
 )
 
 
-class SavedSummaryRequest(BaseModel):
-    summary_json: str
-    transcript: str = ""
+class ExcelRequest(BaseModel):
+    text: str
 
 
 DEFAULT_REPORT = {
@@ -101,6 +100,7 @@ DEFAULT_PRODUCT = {
 
 def merge_dict(defaults: dict, actual: dict) -> dict:
     result = deepcopy(defaults)
+
     if not isinstance(actual, dict):
         return result
 
@@ -156,17 +156,7 @@ def set_if_exists(ws, cell_ref: str, value):
     ws[cell_ref] = "" if value is None else value
 
 
-def split_transcript(text: str):
-    if not text:
-        return []
-
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = text.replace("。", "。\n")
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
-    return lines
-
-
-def fill_monitoring_sheet(wb, data: dict, transcript_text: str = ""):
+def fill_monitoring_sheet(wb, data: dict):
     ws = wb["レイアウト_モニタリング"]
 
     mapping = {
@@ -215,6 +205,7 @@ def fill_monitoring_sheet(wb, data: dict, transcript_text: str = ""):
 
     for i, row in enumerate(goal_rows):
         g = goals[i] if i < len(goals) else DEFAULT_GOAL
+
         set_if_exists(ws, f"C{row}", g.get("目標", ""))
         set_if_exists(ws, f"V{row}", g.get("達成度1", ""))
         set_if_exists(ws, f"V{row + 1}", g.get("達成度2", ""))
@@ -242,13 +233,6 @@ def fill_monitoring_sheet(wb, data: dict, transcript_text: str = ""):
         set_if_exists(ws, f"U{item_row}", p.get("点検結果2", ""))
         set_if_exists(ws, f"Y{item_row}", p.get("今後の方針2", ""))
 
-    transcript_lines = split_transcript(transcript_text)
-
-    for i, line in enumerate(transcript_lines):
-        cell = f"BJ{1 + i}"
-        ws[cell] = line
-        ws[cell].alignment = Alignment(wrap_text=False)
-
     return wb
 
 
@@ -266,23 +250,25 @@ def health():
         "ok": True,
         "template_exists": os.path.exists(TEMPLATE_PATH),
         "template_path": TEMPLATE_PATH,
+        "version": "excel_from_text_json_v1",
     }
 
 
 @app.post("/api/report-excel")
-def report_excel(req: SavedSummaryRequest):
+def report_excel(req: ExcelRequest):
     if not os.path.exists(TEMPLATE_PATH):
         raise HTTPException(status_code=500, detail="template file not found")
 
-    raw_text = (req.summary_json or "").strip()
+    raw_text = (req.text or "").strip()
+
     if not raw_text:
-        raise HTTPException(status_code=400, detail="summary_json empty")
+        raise HTTPException(status_code=400, detail="text empty")
 
     try:
         report = safe_json(raw_text)
 
         wb = load_workbook(TEMPLATE_PATH)
-        wb = fill_monitoring_sheet(wb, report, req.transcript or "")
+        wb = fill_monitoring_sheet(wb, report)
 
         buf = io.BytesIO()
         wb.save(buf)
