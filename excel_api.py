@@ -3,7 +3,6 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment
 import io
 import json
 import os
@@ -33,7 +32,7 @@ TEMPLATE_PATH = os.path.join(
 
 
 class ExcelRequest(BaseModel):
-    text: str
+    summary_json: str
 
 
 DEFAULT_REPORT = {
@@ -250,7 +249,7 @@ def health():
         "ok": True,
         "template_exists": os.path.exists(TEMPLATE_PATH),
         "template_path": TEMPLATE_PATH,
-        "version": "excel_from_text_json_v1",
+        "version": "excel_from_summary_json_v1",
     }
 
 
@@ -259,10 +258,10 @@ def report_excel(req: ExcelRequest):
     if not os.path.exists(TEMPLATE_PATH):
         raise HTTPException(status_code=500, detail="template file not found")
 
-    raw_text = (req.text or "").strip()
+    raw_text = (req.summary_json or "").strip()
 
     if not raw_text:
-        raise HTTPException(status_code=400, detail="text empty")
+        raise HTTPException(status_code=400, detail="summary_json empty")
 
     try:
         report = safe_json(raw_text)
