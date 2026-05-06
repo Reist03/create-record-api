@@ -269,8 +269,8 @@ def health():
     }
 
 
-@app.post("/api/report-excel-from-json")
-def report_excel_from_json(req: SavedSummaryRequest):
+@app.post("/api/report-excel")
+def report_excel(req: SavedSummaryRequest):
     if not os.path.exists(TEMPLATE_PATH):
         raise HTTPException(status_code=500, detail="template file not found")
 
