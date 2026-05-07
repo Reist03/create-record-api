@@ -45,6 +45,7 @@ DEFAULT_REPORT = {
     "利用者名": "",
     "利用者名カナ": "",
     "出力氏名": "",
+
     "性別": "",
     "生年月日": "",
     "年齢": "",
@@ -58,6 +59,7 @@ DEFAULT_REPORT = {
     "住所3": "",
     "電話番号": "",
     "電話番号1": "",
+
     "担当名": "",
     "ケアマネ姓名": "",
 
@@ -65,50 +67,59 @@ DEFAULT_REPORT = {
     "お話伺った人2": "",
     "お話伺った人3": "",
     "お話伺った人その他": "",
+
     "確認方法1": "",
     "確認方法2": "",
 
     "専門相談員による結果": "",
+
     "福祉用具利用目標": [],
     "商品一覧": [],
 
     "身体状況の変化1": "",
     "身体状況の変化2": "",
     "身体状況の変化備考": "",
+
     "ご家族状況の変化1": "",
     "ご家族状況の変化2": "",
     "ご家族状況の変化備考": "",
+
     "お気持ちの変化1": "",
     "お気持ちの変化2": "",
     "お気持ちの変化備考": "",
+
     "生活状況の変化1": "",
     "生活状況の変化2": "",
     "生活状況の変化備考": "",
+
     "見直しの必要性1": "",
     "見直しの必要性2": ""
 }
 
+
 DEFAULT_GOAL = {
     "目標": "",
     "達成度": "",
-    "達成度1": "",
-    "達成度2": "",
-    "達成度3": "",
     "備考": ""
 }
+
 
 DEFAULT_PRODUCT = {
     "対応理由記号": "",
     "選択制対象区分": "",
+
     "サービス名": "",
     "利用開始日": "",
     "商品名": "",
+
     "使用状況の問題1": "",
     "点検結果1": "",
     "今後の方針1": "",
+
     "使用状況の問題2": "",
     "点検結果2": "",
     "今後の方針2": "",
+
     "モニタリング備考": ""
 }
 
@@ -167,8 +178,23 @@ def safe_json(text: str) -> dict:
         return fallback
 
 
+# 修正版
 def set_if_exists(ws, cell_ref: str, value):
-    ws[cell_ref] = "" if value is None else value
+    value = "" if value is None else value
+
+    cell = ws[cell_ref]
+
+    # 結合セル対応
+    for merged_range in ws.merged_cells.ranges:
+        if cell.coordinate in merged_range:
+            top_left_cell = ws.cell(
+                row=merged_range.min_row,
+                column=merged_range.min_col
+            )
+            top_left_cell.value = value
+            return
+
+    cell.value = value
 
 
 def norm(value) -> str:
@@ -182,12 +208,7 @@ def mark_choice(value, expected_values) -> str:
 
 
 def mark_achievement(g: dict, no: int) -> str:
-    value = (
-        norm(g.get("達成度"))
-        or norm(g.get("達成度1"))
-        or norm(g.get("達成度2"))
-        or norm(g.get("達成度3"))
-    )
+    value = norm(g.get("達成度"))
 
     if no == 1:
         return "〇" if value in ["1", "達成"] else ""
@@ -219,7 +240,6 @@ def fill_monitoring_sheet(wb, data: dict):
         "AP2": data.get("利用者名カナ", ""),
         "AP4": data.get("出力氏名", ""),
 
-        # 利用者情報欄
         "C12": data.get("利用者名カナ", ""),
         "C13": data.get("利用者名", ""),
         "R13": data.get("性別", ""),
@@ -233,14 +253,17 @@ def fill_monitoring_sheet(wb, data: dict):
         "AG5": data.get("お話伺った人2", ""),
         "AJ5": data.get("お話伺った人3", ""),
         "AL5": data.get("お話伺った人その他", ""),
+
         "AC6": data.get("確認方法1", ""),
         "AG6": data.get("確認方法2", ""),
+
         "AC8": data.get("担当名", ""),
 
         "AP5": data.get("住所", ""),
         "AR15": data.get("住所1", ""),
         "AR16": data.get("住所2", ""),
         "AR17": data.get("住所3", ""),
+
         "AP6": data.get("電話番号", ""),
         "AI15": data.get("電話番号1", ""),
         "AI16": data.get("ケアマネ姓名", ""),
@@ -301,33 +324,61 @@ def fill_monitoring_sheet(wb, data: dict):
         set_if_exists(ws, f"O{row}", p.get("利用開始日", ""))
         set_if_exists(ws, f"AB{row}", p.get("モニタリング備考", ""))
 
-        set_if_exists(ws, f"R{row}", mark_choice(
-            p.get("使用状況の問題1", ""),
-            ["なし", "0", "問題なし"]
-        ))
-        set_if_exists(ws, f"U{row}", mark_choice(
-            p.get("点検結果1", ""),
-            ["問題なし", "なし", "0"]
-        ))
-        set_if_exists(ws, f"Y{row}", mark_choice(
-            p.get("今後の方針1", ""),
-            ["継続", "1"]
-        ))
+        set_if_exists(
+            ws,
+            f"R{row}",
+            mark_choice(
+                p.get("使用状況の問題1", ""),
+                ["なし", "0", "問題なし"]
+            )
+        )
+
+        set_if_exists(
+            ws,
+            f"U{row}",
+            mark_choice(
+                p.get("点検結果1", ""),
+                ["問題なし", "なし", "0"]
+            )
+        )
+
+        set_if_exists(
+            ws,
+            f"Y{row}",
+            mark_choice(
+                p.get("今後の方針1", ""),
+                ["継続", "1"]
+            )
+        )
 
         set_if_exists(ws, f"C{item_row}", p.get("商品名", ""))
 
-        set_if_exists(ws, f"R{item_row}", mark_choice(
-            p.get("使用状況の問題2", ""),
-            ["あり", "1", "問題あり"]
-        ))
-        set_if_exists(ws, f"U{item_row}", mark_choice(
-            p.get("点検結果2", ""),
-            ["問題あり", "あり", "1"]
-        ))
-        set_if_exists(ws, f"Y{item_row}", mark_choice(
-            p.get("今後の方針2", ""),
-            ["再検討", "2"]
-        ))
+        set_if_exists(
+            ws,
+            f"R{item_row}",
+            mark_choice(
+                p.get("使用状況の問題2", ""),
+                ["あり", "1", "問題あり"]
+            )
+        )
+
+        set_if_exists(
+            ws,
+            f"U{item_row}",
+            mark_choice(
+                p.get("点検結果2", ""),
+                ["問題あり", "あり", "1"]
+            )
+        )
+
+        set_if_exists(
+            ws,
+            f"Y{item_row}",
+            mark_choice(
+                p.get("今後の方針2", ""),
+                ["再検討", "2"]
+            )
+        )
 
     return wb
 
@@ -346,14 +397,17 @@ def health():
         "ok": True,
         "template_exists": os.path.exists(TEMPLATE_PATH),
         "template_path": TEMPLATE_PATH,
-        "version": "excel_output_choice_mark_v2",
+        "version": "excel_output_choice_mark_v3",
     }
 
 
 @app.post("/api/report-excel")
 def report_excel(req: ExcelRequest):
     if not os.path.exists(TEMPLATE_PATH):
-        raise HTTPException(status_code=500, detail="template file not found")
+        raise HTTPException(
+            status_code=500,
+            detail="template file not found"
+        )
 
     raw_text = (
         req.summary_json
@@ -382,7 +436,8 @@ def report_excel(req: ExcelRequest):
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": 'attachment; filename="monitoring_report.xlsx"'
+                "Content-Disposition":
+                'attachment; filename="monitoring_report.xlsx"'
             },
         )
 
